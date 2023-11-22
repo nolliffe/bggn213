@@ -1,0 +1,110 @@
+---
+title: "Class 10 part 2"
+author: "Neva Olliffe PID A69026930"
+format: html
+---
+
+
+# Finish lab 10 Part 4: Adenylate Kinase
+We will use the `bio3d` package for this analysis that starts with a single sequence.
+
+We will also use the `msa` package from BioConductor.
+First we need to install the `BiocManager` package. First, we install `BiocManager` with `install.packages()`. 
+
+We use `BiocManager::install()` to install any other BioConductor packages. 
+
+
+## Q10. 
+
+```{r}
+library(bio3d)
+aa <- get.seq("1ake_A")
+
+```
+
+
+```{r}
+aa
+```
+## Q13. How many amino acids are in this sequence, i.e. how long is this sequence? 
+214 amino acids long.
+
+```{r}
+# Blast or hmmer search 
+#b <- blast.pdb(aa)
+```
+```{r}
+# Plot a summary of search results
+#hits <- plot(b)
+```
+```{r}
+# List out some 'top hits'
+#head(hits$pdb.id)
+```
+> Let's save our results.
+
+```{r}
+save(hits, b, file="blast_results.Rds")
+```
+
+# Test
+```{r}
+load("blast_results.Rds")
+hits
+```
+
+
+
+```{r}
+# Download releated PDB files
+files <- get.pdb(hits$pdb.id, path="pdbs", split=TRUE, gzip=TRUE)
+```
+
+```{r}
+# Align releated PDBs
+pdbs <- pdbaln(files, fit = TRUE, exefile="msa")
+```
+```{r}
+# Vector containing PDB codes for figure axis
+ids <- basename.pdb(pdbs$id)
+
+# Draw schematic alignment
+plot(pdbs, labels=ids)
+```
+
+```{r}
+# Annotate pdb sequences 
+anno <- pdb.annotate(ids)
+unique(anno$source)
+
+```
+
+```{r}
+# Perform PCA
+pc.xray <- pca(pdbs)
+plot(pc.xray)
+```
+
+```{r}
+# Calculate RMSD
+rd <- rmsd(pdbs)
+
+# Structure-based clustering
+hc.rd <- hclust(dist(rd))
+grps.rd <- cutree(hc.rd, k=3)
+
+plot(pc.xray, 1:2, col="grey50", bg=grps.rd, pch=21, cex=1)
+
+```
+
+```{r}
+# Visualize first principal component
+pc1 <- mktrj(pc.xray, pc=1, file="pc_1.pdb")
+```
+
+
+
+
+
+
+

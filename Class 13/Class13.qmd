@@ -1,0 +1,291 @@
+---
+title: "Class 13 RNAseq"
+author: "Neva Olliffe (PID A69026930)"
+format: pdf
+---
+```{r}
+#| message: false 
+library(DESeq2)
+```
+
+
+
+# 3. Import data
+```{r}
+counts <- read.csv("airway_scaledcounts.csv", row.names=1)
+metadata <-  read.csv("airway_metadata.csv")
+
+head(counts)
+head(metadata)
+```
+```{r}
+nrow(counts)
+```
+## Q1. How many genes are in this dataset? 
+38694.
+
+```{r}
+#| message: false
+library(dplyr)
+
+# Find the control samples
+control_samples <- metadata %>% filter(dex == "control")
+
+# Find the number of unique cell lines from control samples
+length(unique(control_samples$celltype))
+
+```
+## Q2. How many ‘control’ cell lines do we have? 
+4 control cell lines.
+
+# 4. Try differential expression
+Lets perform some exploratory differential gene expression analysis. Note: this analysis is for demonstration only. NEVER do differential expression analysis this way!
+
+## Q3. How would you make the above code in either approach more robust? Is there a function that could help here? 
+You need to parameterize the number of control and treated samples. 
+
+```{r}
+
+# Find the id for control samples
+control_samples$id
+
+# Find the counts for control samples
+control.counts <- counts[,control_samples$id]
+control.mean <- rowSums(control.counts)/ncol(control_samples)
+
+head(control.mean)
+```
+## Q4. Follow the same procedure for the treated samples (i.e. calculate the mean per gene across drug treated samples and assign to a labeled vector called treated.mean)
+
+Repeat for treated samples.
+```{r}
+# Find the treated samples
+treated_samples <- metadata %>% filter(dex == "treated")
+
+# Find the id for control samples
+treated_samples$id
+
+# Find the counts for control samples
+treated.counts <- counts[,treated_samples$id]
+treated.mean <- rowSums(treated.counts)/ncol(treated_samples)
+
+head(treated.mean)
+```
+
+```{r}
+meancounts <- data.frame(control.mean, treated.mean)
+colSums(meancounts)
+```
+
+##Q5 (a). Create a scatter plot showing the mean of the treated samples against the mean of the control samples. Your plot should look something like the following.
+```{r}
+plot(meancounts$control.mean, meancounts$treated.mean, xlab = "Control", 
+     ylab = "Treated")
+```
+##Q5 (b).You could also use the ggplot2 package to make this figure producing the plot below. What geom_?() function would you use for this plot?
+```{r}
+library(ggplot2)
+
+ggplot(meancounts, aes(x = meancounts[,1], y = meancounts[,2])) + 
+  geom_point() + 
+  labs(x = "Control", y = "Treated", title = "Mean counts")
+```
+
+##Q6. Try plotting both axes on a log scale. What is the argument to plot() that allows you to do this? 
+```{r}
+ggplot(meancounts, aes(x = meancounts[,1], y = meancounts[,2])) + 
+  geom_point() + 
+  labs(x = "Control", y = "Treated", title = "Mean counts") + 
+  scale_x_continuous(trans = "log2") + scale_y_continuous(trans = "log2")
+```
+
+```{r}
+# Calculate log2 foldchange for these mean counts
+meancounts$log2fc <- log2(meancounts[,"treated.mean"]/meancounts[,"control.mean"])
+head(meancounts)
+```
+Trying to divide by 0 triggers an NaN, -Inf is trying to take the log of 0.
+
+```{r}
+# Find indexes of zero values from either sample and collapse to unique list 
+zero.vals <- which(meancounts[,1:2]==0, arr.ind = TRUE)
+to.rm <- unique(zero.vals[,1])
+
+nonzero.counts <- meancounts[-to.rm,]
+head(nonzero.counts)
+```
+## Q7. What is the purpose of the arr.ind argument in the which() function call above? Why would we then take the first column of the output and need to call the unique() function?
+`arr.ind` tells the `which()` function to return the index of the data we are looking for, which we need to know to be able to remove it. We need to take the first column of the result because this tells us the index of zero values. We need to call `unique()` on it to ensure we aren't trying to remove genes twice if they have 0 reads in both the control and treated samples. 
+
+We want to filter the data for log fold changes above 2 or below -2. 
+```{r}
+up.ind <- nonzero.counts$log2fc > 2
+down.ind <- nonzero.counts$log2fc < (-2)
+```
+
+## Q8. Using the up.ind vector above can you determine how many up regulated genes we have at the greater than 2 fc level? 
+##Q9. Using the down.ind vector above can you determine how many down regulated genes we have at the greater than 2 fc level? 
+```{r}
+up_genes <- nonzero.counts[up.ind,]
+down_genes <- nonzero.counts[down.ind,]
+
+nrow(up_genes)
+nrow(down_genes)
+```
+250 genes are upregulated and 367 are downregulated. 
+
+## Q10. Do you trust these results? Why or why not?
+No. We haven't calculated any kind of test statistic so we don't have a measure of whether these differences are statistically significant.
+
+```{r}
+library(DESeq2)
+citation("DESeq2")
+```
+```{r}
+# Create design matrix
+dds <- DESeqDataSetFromMatrix(countData = counts, colData = metadata, design=~dex)
+dds
+```
+```{r}
+vsd <- vst(dds, blind = FALSE)
+plotPCA(vsd, intgroup = c("dex"))
+```
+```{r}
+# Perform DESeq
+dds <- DESeq(dds)
+```
+```{r}
+# Get DESeq results
+res <- results(dds)
+df_res <- as.data.frame(res)
+
+View(df_res)
+summary(res)
+```
+The reason there are so many uncalculated adjusted p values is that DEseq is removing genes that are unlikely to show statistically significant changes in expression (based on overall expression levels) before calculating these values to increase the detection power and reduce type I errors. 
+```{r}
+# Change p value cutoff to 0.05
+res05 <- results(dds, alpha=0.05)
+summary(res05)
+```
+```{r}
+# Generate volcano plot
+plot(res$log2FoldChange, -log(res$padj), xlab = "log2FC", ylab = "-log(padj)")
+```
+
+```{r}
+# Make it prettier
+mycols <- rep("gray", nrow(res))
+mycols[res$log2FoldChange > 2] <- "black" 
+mycols[res$log2FoldChange < -2] <- "black" 
+mycols[res$padj > .05] <- "grey"
+
+plot(res$log2FoldChange, -log(res$padj), xlab = "log2FC", ylab = "-log(padj)", 
+     col = mycols)
+
+abline(v=c(-2,2), col = "red")
+abline(h=-log(.05), col = "blue")
+
+```
+
+
+# Add annotations
+```{r}
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+
+columns(org.Hs.eg.db)
+```
+
+```{r}
+res$symbol <- mapIds(org.Hs.eg.db, 
+                     keys = row.names(res), # Gene names
+                     keytype = "ENSEMBL", # Format of gene names
+                     column = "SYMBOL", # New format to add
+                     multiVals = "first")
+
+head(res)
+```
+## Q11. Run the mapIds() function two more times to add the Entrez ID and UniProt accession and GENENAME as new columns called res$entrez, res$uniprot and res$genename.
+```{r}
+res$entrez <- mapIds(org.Hs.eg.db, 
+                     keys = row.names(res), # Gene names
+                     keytype = "ENSEMBL", # Format of gene names
+                     column = "ENTREZID", # New format to add
+                     multiVals = "first")
+
+res$uniprot <- mapIds(org.Hs.eg.db, 
+                     keys = row.names(res), # Gene names
+                     keytype = "ENSEMBL", # Format of gene names
+                     column = "UNIPROT", # New format to add
+                     multiVals = "first")
+
+res$genename <- mapIds(org.Hs.eg.db, 
+                     keys = row.names(res), # Gene names
+                     keytype = "ENSEMBL", # Format of gene names
+                     column = "GENENAME", # New format to add
+                     multiVals = "first")
+
+head(res)
+```
+
+```{r}
+# Order results by statistical significance
+ord <- order( res$padj )
+#View(res[ord,])
+head(res[ord,])
+```
+```{r}
+# Write results to a csv
+write.csv(res[ord,], "deseq_results.csv")
+```
+
+
+```{r}
+library(EnhancedVolcano)
+```
+```{r, fig.height=6, fig.width=5}
+x <- as.data.frame(res)
+
+EnhancedVolcano(x,
+    lab = x$symbol,
+    x = 'log2FoldChange',
+    y = 'pvalue')
+
+```
+
+```{r}
+library(pathview)
+library(gage)
+library(gageData)
+
+data(kegg.sets.hs)
+
+# Examine the first 2 pathways in this kegg set for humans
+head(kegg.sets.hs, 2)
+```
+
+```{r}
+foldchanges = res$log2FoldChange
+names(foldchanges) = res$entrez
+head(foldchanges)
+```
+```{r}
+# Run pathway analysis
+keggres = gage(foldchanges, gsets=kegg.sets.hs)
+attributes(keggres)
+```
+```{r}
+# Look at the first three down (less) pathways
+head(keggres$less, 3)
+
+```
+```{r}
+pathview(gene.data=foldchanges, pathway.id="hsa05310")
+```
+![](hsa05310.png)
+
+
+
+
+

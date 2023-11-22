@@ -1,0 +1,6 @@
+---
+title: "HW6"
+author: "Neva Olliffe (PID: A69026930)"
+format: html
+---
+

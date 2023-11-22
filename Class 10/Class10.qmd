@@ -1,0 +1,110 @@
+---
+title: "Class10"
+author: "Neva Olliffe PID: A69026930"
+format: pdf
+---
+
+# 1. Intro to PDB
+```{r}
+library(tidyverse)
+data_summary <- read.csv("Data Export Summary.csv", row.names = 1)
+
+data_summary
+```
+
+
+## Q1: What percentage of structures in the PDB are solved by X-Ray and Electron Microscopy.
+There are 183,201 protein structures and UniProt has 251600768 protein sequences.
+
+```{r}
+round(183201/251600768*100, 2)
+```
+Approximately 7% of proteins have structures - although I don't know that this accounts for multiple structures of the same protein. 
+
+```{r}
+# Write function to remove comma from numeric 
+toNumeric<- function(x) {
+  x_strip <- gsub(",", "", x)
+  
+  as.numeric(x_strip)
+}
+
+# Check how numeric works
+toNumeric("10,000")
+```
+
+```{r}
+
+# Create a new df, numeric_data with the numeric data
+numeric_data <- data.frame(lapply(data_summary, FUN = toNumeric), row.names = rownames(data_summary))
+
+numeric_data
+
+```
+
+```{r}
+
+sum(numeric_data$X.ray,numeric_data$EM) / sum(numeric_data$Total) * 100
+
+```
+93% of structures are solved by EM and X-Ray. 
+
+## Q2: What proportion of structures in the PDB are protein?
+```{r}
+sum(numeric_data[1:3,7])/sum(numeric_data$Total) * 100
+```
+98% of structures are protein. 
+
+## Q3: Type HIV in the PDB website search box on the home page and determine how many HIV-1 protease structures are in the current PDB?
+I did a sub-query for "protease" and selected proteins only and got 1603 structures. 
+
+
+# 2. Visualizing HIV protease
+
+## Q4: Water molecules normally have 3 atoms. Why do we see just one atom per water molecule in this structure?
+There are no hydrogens displayed in this structure because the resolution was not high enough to resolve hydrogen.
+
+![Initial HSG image](1HSG.png)
+![HSG image with critical water and both side chains](1HSG_prettier.png)
+
+## Q5: There is a critical “conserved” water molecule in the binding site. Can you identify this water molecule? What residue number does this water molecule have
+This is HOH 308.
+
+#3. Intro to Bio3D
+```{r}
+library(bio3d)
+pdb <- read.pdb("1hsg")
+```
+
+
+```{r}
+pdb
+```
+## Q7: How many amino acid residues are there in this pdb object? 
+198 amino acid residues. 
+
+## Q8: Name one of the two non-protein residues? 
+HOH and MK1.
+
+## Q9: How many protein chains are in this structure? 
+2.
+
+```{r}
+adk <- read.pdb("6s36")
+adk
+
+```
+```{r}
+# Perform flexiblity prediction
+m <- nma(adk)
+plot(m)
+```
+
+```{r}
+mktrj(m, file="adk_m7.pdb")
+```
+
+
+
+
+
